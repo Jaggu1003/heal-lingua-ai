@@ -17,8 +17,8 @@ All colors MUST be HSL.
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary: 178 64% 45%;
+    --primary-foreground: 0 0% 100%;
 
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -26,15 +26,34 @@ All colors MUST be HSL.
     --muted: 210 40% 96.1%;
     --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 207 89% 54%;
+    --accent-foreground: 0 0% 100%;
 
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --ring: 178 64% 45%;
+
+    /* Healthcare specific colors */
+    --healthcare-teal: 178 64% 45%;
+    --healthcare-blue: 207 89% 54%;
+    --healthcare-green: 142 76% 36%;
+    --healthcare-light-blue: 200 80% 95%;
+    --healthcare-light-green: 142 76% 95%;
+    --healthcare-gray: 210 40% 96.1%;
+
+    /* Gradients */
+    --gradient-healthcare: linear-gradient(135deg, hsl(var(--healthcare-teal)), hsl(var(--healthcare-blue)));
+    --gradient-subtle: linear-gradient(180deg, hsl(var(--background)), hsl(var(--healthcare-gray)));
+
+    /* Shadows */
+    --shadow-soft: 0 4px 20px -2px hsl(var(--healthcare-teal) / 0.1);
+    --shadow-card: 0 8px 25px -8px hsl(var(--healthcare-teal) / 0.15);
+
+    /* Animations */
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
     --radius: 0.5rem;
 
@@ -56,17 +75,17 @@ All colors MUST be HSL.
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
+    --background: 220 13% 8%;
     --foreground: 210 40% 98%;
 
-    --card: 222.2 84% 4.9%;
+    --card: 220 13% 10%;
     --card-foreground: 210 40% 98%;
 
-    --popover: 222.2 84% 4.9%;
+    --popover: 220 13% 10%;
     --popover-foreground: 210 40% 98%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary: 178 64% 55%;
+    --primary-foreground: 220 13% 8%;
 
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -74,15 +93,31 @@ All colors MUST be HSL.
     --muted: 217.2 32.6% 17.5%;
     --muted-foreground: 215 20.2% 65.1%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent: 207 89% 64%;
+    --accent-foreground: 220 13% 8%;
 
-    --destructive: 0 62.8% 30.6%;
+    --destructive: 0 62.8% 50.6%;
     --destructive-foreground: 210 40% 98%;
 
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
+    --ring: 178 64% 55%;
+
+    /* Dark mode healthcare colors */
+    --healthcare-teal: 178 64% 55%;
+    --healthcare-blue: 207 89% 64%;
+    --healthcare-green: 142 76% 46%;
+    --healthcare-light-blue: 200 80% 15%;
+    --healthcare-light-green: 142 76% 15%;
+    --healthcare-gray: 217.2 32.6% 17.5%;
+
+    /* Dark gradients */
+    --gradient-healthcare: linear-gradient(135deg, hsl(var(--healthcare-teal)), hsl(var(--healthcare-blue)));
+    --gradient-subtle: linear-gradient(180deg, hsl(var(--background)), hsl(var(--healthcare-gray)));
+
+    /* Dark shadows */
+    --shadow-soft: 0 4px 20px -2px hsl(var(--healthcare-teal) / 0.2);
+    --shadow-card: 0 8px 25px -8px hsl(var(--healthcare-teal) / 0.25);
     --sidebar-background: 240 5.9% 10%;
     --sidebar-foreground: 240 4.8% 95.9%;
     --sidebar-primary: 224.3 76.3% 48%;
