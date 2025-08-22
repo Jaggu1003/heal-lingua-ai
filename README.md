@@ -1,73 +1,82 @@
-# Welcome to your Lovable project
+ DACSAB – Symptom Checker App
 
-## Project info
+ Overview
 
-**URL**: https://lovable.dev/projects/b25d215a-254f-42f7-a27b-507c62cd5165
+DACSAB is a smart and user-friendly symptom checker web app that helps users diagnose health issues by entering their symptoms.
+The app supports multiple Indian languages 🌐, making healthcare information more accessible.
+It provides personalized health suggestions and guides users on whether they should self-manage, consult a doctor, or seek emergency care.
 
-## How can I edit this code?
 
-There are several ways of editing your application.
+🚀 Features
 
-**Use Lovable**
+✅ Multi-language support (English + Indian regional languages)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/b25d215a-254f-42f7-a27b-507c62cd5165) and start prompting.
+✅ Symptom-based diagnosis powered by AI/ML
 
-Changes made via Lovable will be committed automatically to this repo.
+✅ Clean & responsive UI for mobile and desktop
 
-**Use your preferred IDE**
+✅ User-friendly dashboard with history of past checks
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+✅ Login & Authentication for secure access
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+✅ Scalable backend with APIs for symptom data
 
-Follow these steps:
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+ Tech Stack
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+Frontend: React, TypeScript, TailwindCSS
 
-# Step 3: Install the necessary dependencies.
-npm i
+Backend: Node.js, Express.js
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+Database: MongoDB / PostgreSQL
+
+APIs: OpenAI API (for medical symptom suggestion), Custom health dataset
+
+Tools: Git, GitHub, Storybook (for UI docs), Figma (for UI/UX design)
+
+
+
+⚙️ Installation & Setup
+
+Clone the repository and install dependencies:
+
+# Clone repo
+git clone https://github.com/your-username/dacsab.git
+cd dacsab
+
+# Install frontend
+cd frontend
+npm install
 npm run dev
-```
 
-**Edit a file directly in GitHub**
+# Install backend
+cd ../backend
+npm install
+npm run dev 
+🎯 Usage
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
 
-**Use GitHub Codespaces**
+🌍 Future Scope
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+AI-powered voice-based symptom entry 🎙️
 
-## What technologies are used for this project?
+Integration with telemedicine platforms
 
-This project is built with:
+Wearable health device integration (like smartwatches)
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+Advanced disease prediction models using ML
 
-## How can I deploy this project?
 
-Simply open [Lovable](https://lovable.dev/projects/b25d215a-254f-42f7-a27b-507c62cd5165) and click on Share -> Publish.
+🤝 Contributing
 
-## Can I connect a custom domain to my Lovable project?
+Contributions are welcome! 🎉
 
-Yes, you can!
+Fork the repo
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
+Create a new branch (feature/new-feature)
 
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/tips-tricks/custom-domain#step-by-step-guide)
+Commit your changes
+
+Open a pr
+
+
