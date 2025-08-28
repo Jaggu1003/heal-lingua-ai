@@ -19,7 +19,52 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [showEmailVerification, setShowEmailVerification] = useState(false);
+  const [isResendingEmail, setIsResendingEmail] = useState(false);
   const { toast } = useToast();
+
+  const handleResendVerification = async () => {
+    if (!email) {
+      toast({
+        variant: "destructive",
+        title: "Email Required",
+        description: "Please enter your email address first.",
+      });
+      return;
+    }
+
+    setIsResendingEmail(true);
+    try {
+      const { error } = await supabase.auth.resend({
+        type: 'signup',
+        email: email,
+        options: {
+          emailRedirectTo: `${window.location.origin}/`,
+        }
+      });
+
+      if (error) {
+        toast({
+          variant: "destructive",
+          title: "Failed to Send Email",
+          description: error.message,
+        });
+      } else {
+        toast({
+          title: "Verification Email Sent!",
+          description: "Please check your email inbox and spam folder.",
+        });
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to resend verification email. Please try again.",
+      });
+    } finally {
+      setIsResendingEmail(false);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,11 +126,21 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         });
 
         if (error) {
-          toast({
-            variant: "destructive",
-            title: "Sign In Failed",
-            description: error.message,
-          });
+          // Check if it's an email not confirmed error  
+          if (error.message === 'Email not confirmed' || error.message.includes('email_not_confirmed')) {
+            setShowEmailVerification(true);
+            toast({
+              variant: "destructive", 
+              title: "Email Not Verified",
+              description: "Please verify your email address first. Check your inbox or click 'Resend Email' below.",
+            });
+          } else {
+            toast({
+              variant: "destructive",
+              title: "Sign In Failed", 
+              description: error.message,
+            });
+          }
           return;
         }
 
@@ -193,6 +248,39 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
               )}
             </Button>
           </form>
+
+          {showEmailVerification && (
+            <div className="bg-muted/50 border border-border rounded-lg p-4">
+              <div className="text-center space-y-3">
+                <div className="text-sm text-muted-foreground">
+                  <Mail className="h-5 w-5 mx-auto mb-2 text-healthcare-teal" />
+                  <p className="font-medium">Email Verification Required</p>
+                  <p>We sent a verification link to <span className="font-medium text-foreground">{email}</span></p>
+                  <p className="mt-2">Please check your inbox and spam folder, then click the verification link.</p>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleResendVerification}
+                  disabled={isResendingEmail}
+                  className="w-full"
+                >
+                  {isResendingEmail ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending...
+                    </>
+                  ) : (
+                    <>
+                      <Mail className="mr-2 h-4 w-4" />
+                      Resend Verification Email
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          )}
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
