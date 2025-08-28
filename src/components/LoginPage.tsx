@@ -4,7 +4,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Mail, Lock, Eye, EyeOff } from "lucide-react";
+import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -16,10 +18,94 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const { toast } = useToast();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    onLogin();
+    setIsLoading(true);
+
+    try {
+      if (isSignUp) {
+        // Sign up validation
+        if (password !== confirmPassword) {
+          toast({
+            variant: "destructive",
+            title: "Password Mismatch",
+            description: "Passwords do not match. Please try again.",
+          });
+          return;
+        }
+
+        if (password.length < 6) {
+          toast({
+            variant: "destructive",
+            title: "Password Too Short",
+            description: "Password must be at least 6 characters long.",
+          });
+          return;
+        }
+
+        // Sign up with Supabase
+        const { error } = await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: `${window.location.origin}/`,
+          },
+        });
+
+        if (error) {
+          toast({
+            variant: "destructive",
+            title: "Sign Up Failed",
+            description: error.message,
+          });
+          return;
+        }
+
+        toast({
+          title: "Account Created Successfully!",
+          description: "Please check your email to verify your account.",
+        });
+        
+        // Switch to login mode after successful signup
+        setIsSignUp(false);
+        setPassword("");
+        setConfirmPassword("");
+      } else {
+        // Sign in with Supabase
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (error) {
+          toast({
+            variant: "destructive",
+            title: "Sign In Failed",
+            description: error.message,
+          });
+          return;
+        }
+
+        if (data.user) {
+          toast({
+            title: "Welcome back!",
+            description: "You have successfully signed in.",
+          });
+          onLogin();
+        }
+      }
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Authentication Error",
+        description: "An unexpected error occurred. Please try again.",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -94,9 +180,17 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
             <Button 
               type="submit" 
+              disabled={isLoading}
               className="w-full bg-gradient-to-r from-healthcare-teal to-healthcare-blue hover:from-healthcare-teal/90 hover:to-healthcare-blue/90 transition-all duration-300"
             >
-              {isSignUp ? "Create Account" : "Sign In"}
+              {isLoading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {isSignUp ? "Creating Account..." : "Signing In..."}
+                </>
+              ) : (
+                isSignUp ? "Create Account" : "Sign In"
+              )}
             </Button>
           </form>
 
