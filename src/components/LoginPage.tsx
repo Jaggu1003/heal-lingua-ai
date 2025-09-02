@@ -82,12 +82,15 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
     setIsVerifyingOTP(true);
     try {
-      // Proceed with the original signup since OTP is verified
+      // Create the account with email already marked as verified
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
+          data: {
+            email_verified: true, // Mark as verified since OTP was confirmed
+          }
         }
       });
 
@@ -100,11 +103,28 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         return;
       }
 
-      toast({
-        title: "Account Created!",
-        description: "Your account has been successfully created. You can now log in.",
-      });
-      
+      // Immediately try to sign in the user
+      if (data.user) {
+        const { error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+
+        if (signInError) {
+          toast({
+            title: "Account Created!",
+            description: "Your account was created successfully. Please try logging in.",
+          });
+        } else {
+          toast({
+            title: "Welcome!",
+            description: "Your account has been verified and you're now logged in.",
+          });
+          onLogin();
+          return;
+        }
+      }
+
       setShowOTPVerification(false);
       setIsSignUp(false); // Switch to sign in mode
       setOtp("");
