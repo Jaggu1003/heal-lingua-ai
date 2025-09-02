@@ -4,9 +4,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { Mail, Lock, Eye, EyeOff, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Loader2, Mail, Lock, Shield } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 interface LoginPageProps {
   onLogin: () => void;
@@ -19,11 +20,18 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [showEmailVerification, setShowEmailVerification] = useState(false);
-  const [isResendingEmail, setIsResendingEmail] = useState(false);
+  const [showOTPVerification, setShowOTPVerification] = useState(false);
+  const [otp, setOtp] = useState("");
+  const [otpCode, setOtpCode] = useState("");
+  const [isSendingOTP, setIsSendingOTP] = useState(false);
+  const [isVerifyingOTP, setIsVerifyingOTP] = useState(false);
   const { toast } = useToast();
 
-  const handleResendVerification = async () => {
+  const generateOTP = () => {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  };
+
+  const sendOTP = async () => {
     if (!email) {
       toast({
         variant: "destructive",
@@ -33,11 +41,51 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       return;
     }
 
-    setIsResendingEmail(true);
+    setIsSendingOTP(true);
+    const generatedOTP = generateOTP();
+    setOtpCode(generatedOTP);
+
     try {
-      const { error } = await supabase.auth.resend({
-        type: 'signup',
-        email: email,
+      const response = await supabase.functions.invoke('send-otp', {
+        body: { email, otp: generatedOTP }
+      });
+
+      if (response.error) {
+        throw response.error;
+      }
+
+      toast({
+        title: "OTP Sent!",
+        description: "Please check your email for the verification code.",
+      });
+      setShowOTPVerification(true);
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Failed to Send OTP",
+        description: error.message || "Failed to send verification code. Please try again.",
+      });
+    } finally {
+      setIsSendingOTP(false);
+    }
+  };
+
+  const verifyOTP = async () => {
+    if (otp !== otpCode) {
+      toast({
+        variant: "destructive",
+        title: "Invalid Code",
+        description: "The verification code you entered is incorrect.",
+      });
+      return;
+    }
+
+    setIsVerifyingOTP(true);
+    try {
+      // Proceed with the original signup since OTP is verified
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
         options: {
           emailRedirectTo: `${window.location.origin}/`,
         }
@@ -46,23 +94,29 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       if (error) {
         toast({
           variant: "destructive",
-          title: "Failed to Send Email",
+          title: "Sign Up Failed",
           description: error.message,
         });
-      } else {
-        toast({
-          title: "Verification Email Sent!",
-          description: "Please check your email inbox and spam folder.",
-        });
+        return;
       }
-    } catch (error) {
+
+      toast({
+        title: "Account Created!",
+        description: "Your account has been successfully created. You can now log in.",
+      });
+      
+      setShowOTPVerification(false);
+      setIsSignUp(false); // Switch to sign in mode
+      setOtp("");
+      setOtpCode("");
+    } catch (error: any) {
       toast({
         variant: "destructive",
-        title: "Error",
-        description: "Failed to resend verification email. Please try again.",
+        title: "Verification Failed",
+        description: error.message || "Failed to complete verification. Please try again.",
       });
     } finally {
-      setIsResendingEmail(false);
+      setIsVerifyingOTP(false);
     }
   };
 
@@ -72,12 +126,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
     try {
       if (isSignUp) {
-        // Sign up validation
+        // Handle sign up with OTP verification
         if (password !== confirmPassword) {
           toast({
             variant: "destructive",
-            title: "Password Mismatch",
-            description: "Passwords do not match. Please try again.",
+            title: "Passwords don't match",
+            description: "Please make sure your passwords match.",
           });
           return;
         }
@@ -91,33 +145,9 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
           return;
         }
 
-        // Sign up with Supabase
-        const { error } = await supabase.auth.signUp({
-          email,
-          password,
-          options: {
-            emailRedirectTo: `${window.location.origin}/`,
-          },
-        });
-
-        if (error) {
-          toast({
-            variant: "destructive",
-            title: "Sign Up Failed",
-            description: error.message,
-          });
-          return;
-        }
-
-        toast({
-          title: "Account Created Successfully!",
-          description: "Please check your email to verify your account.",
-        });
-        
-        // Switch to login mode after successful signup
-        setIsSignUp(false);
-        setPassword("");
-        setConfirmPassword("");
+        // Send OTP instead of direct signup
+        await sendOTP();
+        return;
       } else {
         // Sign in with Supabase
         const { data, error } = await supabase.auth.signInWithPassword({
@@ -126,21 +156,11 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         });
 
         if (error) {
-          // Check if it's an email not confirmed error  
-          if (error.message === 'Email not confirmed' || error.message.includes('email_not_confirmed')) {
-            setShowEmailVerification(true);
-            toast({
-              variant: "destructive", 
-              title: "Email Not Verified",
-              description: "Please verify your email address first. Check your inbox or click 'Resend Email' below.",
-            });
-          } else {
-            toast({
-              variant: "destructive",
-              title: "Sign In Failed", 
-              description: error.message,
-            });
-          }
+          toast({
+            variant: "destructive",
+            title: "Sign In Failed", 
+            description: error.message,
+          });
           return;
         }
 
@@ -249,35 +269,68 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
             </Button>
           </form>
 
-          {showEmailVerification && (
-            <div className="bg-muted/50 border border-border rounded-lg p-4">
-              <div className="text-center space-y-3">
+          {showOTPVerification && (
+            <div className="bg-muted/50 border border-border rounded-lg p-6">
+              <div className="text-center space-y-4">
                 <div className="text-sm text-muted-foreground">
-                  <Mail className="h-5 w-5 mx-auto mb-2 text-healthcare-teal" />
-                  <p className="font-medium">Email Verification Required</p>
-                  <p>We sent a verification link to <span className="font-medium text-foreground">{email}</span></p>
-                  <p className="mt-2">Please check your inbox and spam folder, then click the verification link.</p>
+                  <Shield className="h-6 w-6 mx-auto mb-3 text-healthcare-teal" />
+                  <p className="font-medium text-base text-foreground mb-2">Verify Your Email</p>
+                  <p>We sent a 6-digit code to <span className="font-medium text-foreground">{email}</span></p>
+                  <p className="mt-2">Enter the code below to complete your registration:</p>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={handleResendVerification}
-                  disabled={isResendingEmail}
-                  className="w-full"
-                >
-                  {isResendingEmail ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Sending...
-                    </>
-                  ) : (
-                    <>
-                      <Mail className="mr-2 h-4 w-4" />
-                      Resend Verification Email
-                    </>
-                  )}
-                </Button>
+                
+                <div className="flex justify-center py-4">
+                  <InputOTP
+                    value={otp}
+                    onChange={setOtp}
+                    maxLength={6}
+                  >
+                    <InputOTPGroup>
+                      <InputOTPSlot index={0} />
+                      <InputOTPSlot index={1} />
+                      <InputOTPSlot index={2} />
+                      <InputOTPSlot index={3} />
+                      <InputOTPSlot index={4} />
+                      <InputOTPSlot index={5} />
+                    </InputOTPGroup>
+                  </InputOTP>
+                </div>
+                
+                <div className="space-y-2">
+                  <Button
+                    type="button"
+                    onClick={verifyOTP}
+                    disabled={isVerifyingOTP || otp.length !== 6}
+                    className="w-full"
+                  >
+                    {isVerifyingOTP ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Verifying...
+                      </>
+                    ) : (
+                      "Verify Code"
+                    )}
+                  </Button>
+                  
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={sendOTP}
+                    disabled={isSendingOTP}
+                    className="w-full text-xs"
+                  >
+                    {isSendingOTP ? (
+                      <>
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        Sending...
+                      </>
+                    ) : (
+                      "Resend Code"
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
           )}
