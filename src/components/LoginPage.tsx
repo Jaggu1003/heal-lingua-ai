@@ -82,51 +82,46 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
 
     setIsVerifyingOTP(true);
     try {
-      // Create the account with email already marked as verified
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: `${window.location.origin}/`,
-          data: {
-            email_verified: true, // Mark as verified since OTP was confirmed
-          }
+      // Use our custom edge function to create verified user
+      const response = await supabase.functions.invoke('verify-otp-signup', {
+        body: { 
+          email, 
+          password, 
+          otp, 
+          storedOtp: otpCode 
         }
       });
 
-      if (error) {
+      if (response.error) {
         toast({
           variant: "destructive",
-          title: "Sign Up Failed",
-          description: error.message,
+          title: "Verification Failed",
+          description: response.error.message || "Failed to verify OTP. Please try again.",
         });
         return;
       }
 
-      // Immediately try to sign in the user
-      if (data.user) {
-        const { error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
+      // Now sign in the user immediately
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
 
-        if (signInError) {
-          toast({
-            title: "Account Created!",
-            description: "Your account was created successfully. Please try logging in.",
-          });
-        } else {
-          toast({
-            title: "Welcome!",
-            description: "Your account has been verified and you're now logged in.",
-          });
-          onLogin();
-          return;
-        }
+      if (signInError) {
+        toast({
+          title: "Account Created!",
+          description: "Your account was created successfully. Please try logging in.",
+        });
+        setShowOTPVerification(false);
+        setIsSignUp(false);
+      } else {
+        toast({
+          title: "Welcome!",
+          description: "Your account has been verified and you're now logged in.",
+        });
+        onLogin();
       }
 
-      setShowOTPVerification(false);
-      setIsSignUp(false); // Switch to sign in mode
       setOtp("");
       setOtpCode("");
     } catch (error: any) {
