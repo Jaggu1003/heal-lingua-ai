@@ -1,7 +1,6 @@
 import { useState, useEffect } from "react";
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from "@/integrations/supabase/client";
-import LoginPage from "./LoginPage";
 import UserHeader from "./UserHeader";
 import HeroSection from "./HeroSection";
 import LanguageSelector from "./LanguageSelector";
@@ -11,7 +10,7 @@ import DiagnosisOutput from "./DiagnosisOutput";
 import AboutTrustSection from "./AboutTrustSection";
 import Footer from "./Footer";
 
-type AppState = "login" | "hero" | "language" | "symptoms" | "chat" | "diagnosis" | "complete";
+type AppState = "hero" | "language" | "symptoms" | "chat" | "diagnosis" | "complete";
 
 interface Message {
   id: string;
@@ -21,7 +20,7 @@ interface Message {
 }
 
 export default function HealthcareApp() {
-  const [currentState, setCurrentState] = useState<AppState>("login");
+  const [currentState, setCurrentState] = useState<AppState>("hero");
   const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [userSymptoms, setUserSymptoms] = useState("");
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
@@ -42,8 +41,6 @@ export default function HealthcareApp() {
           setTimeout(() => {
             loadUserProfile(session.user.id);
           }, 0);
-        } else {
-          setCurrentState("login");
         }
         setIsLoading(false);
       }
@@ -79,9 +76,6 @@ export default function HealthcareApp() {
     }
   };
 
-  const handleLogin = () => {
-    setCurrentState("hero");
-  };
 
   const handleStartDiagnosis = () => {
     setCurrentState("language");
@@ -117,9 +111,6 @@ export default function HealthcareApp() {
 
   const renderCurrentSection = () => {
     switch (currentState) {
-      case "login":
-        return <LoginPage onLogin={handleLogin} />;
-      
       case "hero":
         return (
           <>
@@ -162,7 +153,12 @@ export default function HealthcareApp() {
         );
       
       default:
-        return <LoginPage onLogin={handleLogin} />;
+        return (
+          <>
+            <HeroSection onStartDiagnosis={handleStartDiagnosis} />
+            <AboutTrustSection />
+          </>
+        );
     }
   };
 
@@ -179,9 +175,9 @@ export default function HealthcareApp() {
 
   return (
     <div className="min-h-screen bg-background">
-      {user && currentState !== "login" && <UserHeader user={user} />}
+      {user && <UserHeader user={user} />}
       {renderCurrentSection()}
-      {currentState !== "login" && <Footer />}
+      <Footer />
     </div>
   );
 }
