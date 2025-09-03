@@ -1,7 +1,7 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Globe, Check } from "lucide-react";
+import { useTranslation } from "@/contexts/TranslationContext";
 
 interface Language {
   code: string;
@@ -26,11 +26,11 @@ const languages: Language[] = [
 ];
 
 interface LanguageSelectorProps {
-  selectedLanguage: string;
   onLanguageSelect: (language: string) => void;
 }
 
-export default function LanguageSelector({ selectedLanguage, onLanguageSelect }: LanguageSelectorProps) {
+export default function LanguageSelector({ onLanguageSelect }: LanguageSelectorProps) {
+  const { currentLanguage, setLanguage, t, isLoading } = useTranslation();
   return (
     <section className="py-16 px-4 bg-healthcare-gray/30">
       <div className="max-w-4xl mx-auto">
@@ -39,7 +39,7 @@ export default function LanguageSelector({ selectedLanguage, onLanguageSelect }:
             <div className="mx-auto w-16 h-16 bg-gradient-to-r from-healthcare-teal to-healthcare-blue rounded-full flex items-center justify-center mb-4">
               <Globe className="h-8 w-8 text-white" />
             </div>
-            <CardTitle className="text-2xl font-bold">Choose Your Language</CardTitle>
+            <CardTitle className="text-2xl font-bold">{t('choose_language', 'Choose Your Language')}</CardTitle>
             <p className="text-muted-foreground">
               Select your preferred language for the most comfortable healthcare experience
             </p>
@@ -49,15 +49,19 @@ export default function LanguageSelector({ selectedLanguage, onLanguageSelect }:
               {languages.map((lang) => (
                 <Button
                   key={lang.code}
-                  variant={selectedLanguage === lang.code ? "default" : "outline"}
-                  onClick={() => onLanguageSelect(lang.code)}
+                  variant={currentLanguage === lang.code ? "default" : "outline"}
+                  onClick={async () => {
+                    await setLanguage(lang.code);
+                    onLanguageSelect(lang.code);
+                  }}
+                  disabled={isLoading}
                   className={`relative h-auto p-4 flex flex-col items-center gap-2 transition-all duration-300 hover:scale-105 ${
-                    selectedLanguage === lang.code
+                    currentLanguage === lang.code
                       ? "bg-gradient-to-r from-healthcare-teal to-healthcare-blue text-white shadow-lg"
                       : "hover:bg-healthcare-light-blue/50 hover:border-healthcare-teal"
                   }`}
                 >
-                  {selectedLanguage === lang.code && (
+                  {currentLanguage === lang.code && (
                     <Check className="absolute top-2 right-2 h-4 w-4" />
                   )}
                   <span className="text-2xl">{lang.flag}</span>
@@ -71,8 +75,8 @@ export default function LanguageSelector({ selectedLanguage, onLanguageSelect }:
             
             <div className="mt-6 p-4 bg-healthcare-light-blue/20 rounded-lg">
               <p className="text-sm text-center text-muted-foreground">
-                <strong>Selected:</strong> {languages.find(l => l.code === selectedLanguage)?.name || "English"} 
-                ({languages.find(l => l.code === selectedLanguage)?.nativeName || "English"})
+                <strong>Selected:</strong> {languages.find(l => l.code === currentLanguage)?.name || "English"} 
+                ({languages.find(l => l.code === currentLanguage)?.nativeName || "English"})
               </p>
             </div>
           </CardContent>

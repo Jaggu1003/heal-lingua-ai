@@ -1,11 +1,13 @@
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Heart, Globe } from "lucide-react";
+import { useTranslation } from "@/contexts/TranslationContext";
 
 interface HeroSectionProps {
   onStartDiagnosis: () => void;
 }
 
 export default function HeroSection({ onStartDiagnosis }: HeroSectionProps) {
+  const { t } = useTranslation();
   return (
     <section className="py-20 px-4 bg-gradient-to-br from-healthcare-light-blue via-background to-healthcare-light-green">
       <div className="max-w-6xl mx-auto">
@@ -14,17 +16,13 @@ export default function HeroSection({ onStartDiagnosis }: HeroSectionProps) {
             <div className="space-y-4">
               <div className="inline-flex items-center gap-2 px-4 py-2 bg-healthcare-teal/10 rounded-full text-healthcare-teal text-sm font-medium">
                 <Heart className="h-4 w-4" />
-                AI-Powered Healthcare
+                {t('trusted_healthcare', 'AI-Powered Healthcare')}
               </div>
               <h1 className="text-4xl md:text-6xl font-bold leading-tight">
-                Health Diagnosis in{" "}
-                <span className="bg-gradient-to-r from-healthcare-teal to-healthcare-blue bg-clip-text text-transparent">
-                  Your Language
-                </span>
+                {t('welcome_message', 'Health Diagnosis in Your Language')}
               </h1>
               <p className="text-xl text-muted-foreground leading-relaxed">
-                Get instant, accurate health insights powered by advanced AI technology. 
-                Communicate with our healthcare assistant in Hindi, Tamil, Bengali, Marathi, and more Indian languages.
+                {t('accurate_diagnosis', 'Get instant, accurate health insights powered by advanced AI technology. Communicate with our healthcare assistant in Hindi, Tamil, Bengali, Marathi, and more Indian languages.')}
               </p>
             </div>
 
@@ -34,7 +32,7 @@ export default function HeroSection({ onStartDiagnosis }: HeroSectionProps) {
                 onClick={onStartDiagnosis}
                 className="bg-gradient-to-r from-healthcare-teal to-healthcare-blue hover:from-healthcare-teal/90 hover:to-healthcare-blue/90 text-white px-8 py-6 text-lg font-semibold shadow-lg hover:shadow-xl transition-all duration-300 group"
               >
-                Start Free Diagnosis
+                {t('start_diagnosis', 'Start Free Diagnosis')}
                 <ArrowRight className="ml-2 h-5 w-5 group-hover:translate-x-1 transition-transform" />
               </Button>
               <Button 

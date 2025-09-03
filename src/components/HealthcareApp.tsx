@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from "@/integrations/supabase/client";
+import { useTranslation } from "@/contexts/TranslationContext";
 import UserHeader from "./UserHeader";
 import HeroSection from "./HeroSection";
 import LanguageSelector from "./LanguageSelector";
@@ -21,12 +22,12 @@ interface Message {
 
 export default function HealthcareApp() {
   const [currentState, setCurrentState] = useState<AppState>("hero");
-  const [selectedLanguage, setSelectedLanguage] = useState("en");
   const [userSymptoms, setUserSymptoms] = useState("");
   const [chatMessages, setChatMessages] = useState<Message[]>([]);
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const { currentLanguage } = useTranslation();
 
   useEffect(() => {
     // Set up auth state listener
@@ -61,19 +62,8 @@ export default function HealthcareApp() {
   }, []);
 
   const loadUserProfile = async (userId: string) => {
-    try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('preferred_language')
-        .eq('user_id', userId)
-        .single();
-        
-      if (profile?.preferred_language) {
-        setSelectedLanguage(profile.preferred_language);
-      }
-    } catch (error) {
-      console.error('Error loading user profile:', error);
-    }
+    // Profile loading is now handled by TranslationContext
+    // This function can be removed or used for other profile data
   };
 
 
@@ -82,20 +72,7 @@ export default function HealthcareApp() {
   };
 
   const handleLanguageSelect = async (language: string) => {
-    setSelectedLanguage(language);
-    
-    // Save language preference to user profile
-    if (user) {
-      try {
-        await supabase
-          .from('profiles')
-          .update({ preferred_language: language })
-          .eq('user_id', user.id);
-      } catch (error) {
-        console.error('Error saving language preference:', error);
-      }
-    }
-    
+    // Language preference is now handled by TranslationContext
     setCurrentState("symptoms");
   };
 
@@ -122,7 +99,6 @@ export default function HealthcareApp() {
       case "language":
         return (
           <LanguageSelector 
-            selectedLanguage={selectedLanguage}
             onLanguageSelect={handleLanguageSelect}
           />
         );
@@ -131,7 +107,7 @@ export default function HealthcareApp() {
         return (
           <SymptomInput 
             onSubmitSymptoms={handleSubmitSymptoms}
-            selectedLanguage={selectedLanguage}
+            selectedLanguage={currentLanguage}
           />
         );
       
@@ -139,7 +115,7 @@ export default function HealthcareApp() {
         return (
           <AIChatSection 
             initialSymptoms={userSymptoms}
-            selectedLanguage={selectedLanguage}
+            selectedLanguage={currentLanguage}
             onGetDiagnosis={handleGetDiagnosis}
           />
         );
@@ -147,7 +123,7 @@ export default function HealthcareApp() {
       case "diagnosis":
         return (
           <>
-            <DiagnosisOutput selectedLanguage={selectedLanguage} />
+            <DiagnosisOutput selectedLanguage={currentLanguage} />
             <AboutTrustSection />
           </>
         );
