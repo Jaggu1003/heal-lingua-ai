@@ -25,7 +25,7 @@ const languages = [
   { code: "as", name: "Assamese", nativeName: "অসমীয়া" },
 ];
 
-type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'listening' | 'processing' | 'error';
+type ConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'listening' | 'processing' | 'speaking' | 'error';
 
 interface Message {
   id: string;
@@ -40,6 +40,8 @@ export default function SpeechInterface() {
   const [selectedLanguage, setSelectedLanguage] = useState('en');
   const [messages, setMessages] = useState<Message[]>([]);
   const [currentTranscript, setCurrentTranscript] = useState('');
+  const [userTranscript, setUserTranscript] = useState('');
+  const [permissionError, setPermissionError] = useState(false);
   const speechChatRef = useRef<RealtimeSpeechChat | null>(null);
   const { t } = useTranslation();
 
@@ -50,6 +52,8 @@ export default function SpeechInterface() {
   }, []);
 
   const handleMessage = (data: any) => {
+    console.log('Received message:', data.type, data);
+    
     if (data.type === 'response.audio_transcript.delta') {
       setCurrentTranscript(prev => prev + data.delta);
     } else if (data.type === 'response.audio_transcript.done') {
@@ -63,11 +67,31 @@ export default function SpeechInterface() {
         setMessages(prev => [...prev, newMessage]);
         
         // Save to database
-        saveConversation(currentTranscript, currentTranscript);
+        saveConversation(userTranscript, currentTranscript);
       }
       setCurrentTranscript('');
+      setStatus('connected');
+    } else if (data.type === 'input_audio_buffer.speech_started') {
+      setStatus('listening');
+      setUserTranscript('');
     } else if (data.type === 'input_audio_buffer.speech_stopped') {
-      // User finished speaking, could show their transcript here if available
+      setStatus('processing');
+    } else if (data.type === 'response.audio.delta') {
+      setStatus('speaking');
+    } else if (data.type === 'input_audio_buffer.committed') {
+      // User input was processed
+    } else if (data.type === 'conversation.item.input_audio_transcription.completed') {
+      // User speech transcript
+      if (data.transcript) {
+        setUserTranscript(data.transcript);
+        const userMessage: Message = {
+          id: Date.now().toString(),
+          type: 'user',
+          text: data.transcript,
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, userMessage]);
+      }
     }
   };
 
@@ -87,20 +111,47 @@ export default function SpeechInterface() {
     }
   };
 
+  const checkMicrophonePermission = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach(track => track.stop());
+      setPermissionError(false);
+      return true;
+    } catch (error) {
+      console.error('Microphone permission error:', error);
+      setPermissionError(true);
+      toast.error("Microphone permission denied. Please enable microphone access to use voice features.");
+      return false;
+    }
+  };
+
   const startConversation = async () => {
     try {
       setStatus('connecting');
+      
+      const hasPermission = await checkMicrophonePermission();
+      if (!hasPermission) {
+        setStatus('error');
+        return;
+      }
+
       speechChatRef.current = new RealtimeSpeechChat();
       
       await speechChatRef.current.connect(
         handleMessage,
-        (newStatus) => setStatus(newStatus as ConnectionStatus)
+        (newStatus) => setStatus(newStatus as ConnectionStatus),
+        selectedLanguage
       );
       
       toast.success("Voice conversation started! Speak naturally to get healthcare advice.");
     } catch (error) {
       console.error('Error starting conversation:', error);
-      toast.error("Failed to start voice conversation. Please check your microphone permissions.");
+      if (error.name === 'NotAllowedError') {
+        toast.error("Microphone permission denied. Please enable microphone access.");
+        setPermissionError(true);
+      } else {
+        toast.error("Failed to start voice conversation. Please try again.");
+      }
       setStatus('error');
     }
   };
@@ -108,25 +159,39 @@ export default function SpeechInterface() {
   const stopConversation = () => {
     speechChatRef.current?.disconnect();
     setStatus('disconnected');
+    setCurrentTranscript('');
+    setUserTranscript('');
     toast.info("Voice conversation ended.");
+  };
+
+  const handleLanguageChange = (newLanguage: string) => {
+    setSelectedLanguage(newLanguage);
+    
+    // Update the session if already connected
+    if (speechChatRef.current && status !== 'disconnected') {
+      speechChatRef.current.updateLanguage(newLanguage);
+      toast.success(`Language switched to ${languages.find(l => l.code === newLanguage)?.name}`);
+    }
   };
 
   const getStatusText = () => {
     switch (status) {
       case 'connecting': return 'Connecting...';
-      case 'connected': return 'Ready to listen';
+      case 'connected': return 'Ready - Tap to speak';
       case 'listening': return 'Listening...';
-      case 'processing': return 'AI is thinking...';
-      case 'error': return 'Connection error';
-      default: return 'Not connected';
+      case 'processing': return 'Processing your request...';
+      case 'speaking': return 'AI is speaking...';
+      case 'error': return permissionError ? 'Microphone access needed' : 'Connection error';
+      default: return 'Tap to start';
     }
   };
 
   const getStatusColor = () => {
     switch (status) {
       case 'connected': return 'text-healthcare-teal';
-      case 'listening': return 'text-blue-500';
+      case 'listening': return 'text-blue-500 animate-pulse';
       case 'processing': return 'text-yellow-500';
+      case 'speaking': return 'text-green-500';
       case 'error': return 'text-red-500';
       default: return 'text-muted-foreground';
     }
@@ -154,7 +219,7 @@ export default function SpeechInterface() {
             <div className="mb-6 flex flex-col sm:flex-row gap-4 items-center justify-center">
               <div className="flex items-center gap-2">
                 <Label htmlFor="language-select">Language:</Label>
-                <Select value={selectedLanguage} onValueChange={setSelectedLanguage}>
+                <Select value={selectedLanguage} onValueChange={handleLanguageChange}>
                   <SelectTrigger className="w-48">
                     <SelectValue />
                   </SelectTrigger>
@@ -185,14 +250,15 @@ export default function SpeechInterface() {
               </div>
 
               <div className="flex justify-center gap-4">
-                {status === 'disconnected' || status === 'error' ? (
+                {status === 'disconnected' || status === 'error' || status === 'connecting' ? (
                   <Button
                     onClick={startConversation}
                     size="lg"
                     className="bg-gradient-to-r from-healthcare-teal to-healthcare-blue text-white hover:opacity-90 transition-all duration-300"
+                    disabled={status === 'connecting'}
                   >
                     <Mic className="h-5 w-5 mr-2" />
-                    Start Voice Chat
+                    {status === 'connecting' ? 'Connecting...' : 'Start Voice Chat'}
                   </Button>
                 ) : (
                   <Button
@@ -202,29 +268,53 @@ export default function SpeechInterface() {
                     className="bg-red-500 hover:bg-red-600"
                   >
                     <Square className="h-5 w-5 mr-2" />
-                    Stop Conversation
+                    End Conversation
                   </Button>
                 )}
               </div>
+              
+              {permissionError && (
+                <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-center">
+                  <p className="text-red-700 mb-2">Microphone access is required for voice features.</p>
+                  <Button
+                    onClick={() => window.location.reload()}
+                    variant="outline"
+                    size="sm"
+                    className="text-red-700 border-red-300 hover:bg-red-50"
+                  >
+                    Refresh & Try Again
+                  </Button>
+                </div>
+              )}
             </div>
 
             {/* Visual Feedback */}
             <div className="flex justify-center mb-6">
-              <div className={`w-16 h-16 rounded-full border-4 flex items-center justify-center transition-all duration-300 ${
+              <div className={`w-20 h-20 rounded-full border-4 flex items-center justify-center transition-all duration-500 ${
                 status === 'listening' 
-                  ? 'border-blue-500 bg-blue-50 animate-pulse' 
+                  ? 'border-blue-500 bg-blue-50 animate-pulse shadow-lg shadow-blue-200' 
                   : status === 'processing'
-                  ? 'border-yellow-500 bg-yellow-50 animate-spin'
+                  ? 'border-yellow-500 bg-yellow-50 animate-pulse shadow-lg shadow-yellow-200'
+                  : status === 'speaking'
+                  ? 'border-green-500 bg-green-50 animate-pulse shadow-lg shadow-green-200'
                   : status === 'connected'
-                  ? 'border-healthcare-teal bg-healthcare-light-blue/20'
+                  ? 'border-healthcare-teal bg-healthcare-light-blue/20 shadow-lg shadow-healthcare-teal/20'
+                  : status === 'connecting'
+                  ? 'border-gray-400 bg-gray-100 animate-spin'
                   : 'border-gray-300 bg-gray-50'
               }`}>
                 {status === 'listening' ? (
-                  <Mic className="h-8 w-8 text-blue-500" />
-                ) : status === 'connected' ? (
-                  <Mic className="h-8 w-8 text-healthcare-teal" />
+                  <Mic className="h-10 w-10 text-blue-500" />
+                ) : status === 'speaking' ? (
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-6 bg-green-500 rounded animate-pulse"></div>
+                    <div className="w-2 h-8 bg-green-500 rounded animate-pulse" style={{animationDelay: '0.1s'}}></div>
+                    <div className="w-2 h-6 bg-green-500 rounded animate-pulse" style={{animationDelay: '0.2s'}}></div>
+                  </div>
+                ) : status === 'connected' || status === 'processing' ? (
+                  <Mic className="h-10 w-10 text-healthcare-teal" />
                 ) : (
-                  <MicOff className="h-8 w-8 text-gray-400" />
+                  <MicOff className="h-10 w-10 text-gray-400" />
                 )}
               </div>
             </div>

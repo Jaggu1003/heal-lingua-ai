@@ -179,7 +179,7 @@ export class RealtimeSpeechChat {
     this.audioQueue = new AudioQueue(this.audioContext);
   }
 
-  async connect(onMessage: (message: any) => void, onStatusChange: (status: string) => void) {
+  async connect(onMessage: (message: any) => void, onStatusChange: (status: string) => void, language = 'en') {
     this.onMessageCallback = onMessage;
     this.onStatusChangeCallback = onStatusChange;
 
@@ -190,6 +190,28 @@ export class RealtimeSpeechChat {
       this.ws.onopen = () => {
         console.log('Connected to speech service');
         this.onStatusChangeCallback?.('connected');
+        
+        // Send language preference to the backend
+        this.ws?.send(JSON.stringify({
+          type: 'session.update',
+          session: {
+            instructions: `You are a helpful healthcare assistant. Always respond in ${language === 'en' ? 'English' : this.getLanguageName(language)}. Provide brief, practical home remedies and health advice. Include appropriate medical disclaimers.`,
+            modalities: ['text', 'audio'],
+            voice: 'alloy',
+            input_audio_format: 'pcm16',
+            output_audio_format: 'pcm16',
+            input_audio_transcription: {
+              model: 'whisper-1'
+            },
+            turn_detection: {
+              type: 'server_vad',
+              threshold: 0.5,
+              prefix_padding_ms: 300,
+              silence_duration_ms: 1000
+            },
+            temperature: 0.8
+          }
+        }));
       };
 
       this.ws.onmessage = async (event) => {
@@ -247,6 +269,35 @@ export class RealtimeSpeechChat {
       console.error('Error connecting:', error);
       this.onStatusChangeCallback?.('error');
       throw error;
+    }
+  }
+
+  private getLanguageName(code: string): string {
+    const languages: Record<string, string> = {
+      'hi': 'Hindi',
+      'en': 'English',
+      'ta': 'Tamil',
+      'te': 'Telugu',
+      'bn': 'Bengali',
+      'mr': 'Marathi',
+      'gu': 'Gujarati',
+      'kn': 'Kannada',
+      'ml': 'Malayalam',
+      'pa': 'Punjabi',
+      'or': 'Odia',
+      'as': 'Assamese'
+    };
+    return languages[code] || 'English';
+  }
+
+  updateLanguage(language: string) {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'session.update',
+        session: {
+          instructions: `You are a helpful healthcare assistant. Always respond in ${language === 'en' ? 'English' : this.getLanguageName(language)}. Provide brief, practical home remedies and health advice. Include appropriate medical disclaimers.`
+        }
+      }));
     }
   }
 
