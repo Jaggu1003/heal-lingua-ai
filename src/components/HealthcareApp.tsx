@@ -9,6 +9,7 @@ import SymptomInput from "./SymptomInput";
 import AIChatSection from "./AIChatSection";
 import DiagnosisOutput from "./DiagnosisOutput";
 import AboutTrustSection from "./AboutTrustSection";
+import SpeechInterface from "./SpeechInterface";
 import Footer from "./Footer";
 
 type AppState = "hero" | "language" | "symptoms" | "chat" | "diagnosis" | "complete";
@@ -92,6 +93,7 @@ export default function HealthcareApp() {
         return (
           <>
             <HeroSection onStartDiagnosis={handleStartDiagnosis} />
+            <SpeechInterface />
             <AboutTrustSection />
           </>
         );

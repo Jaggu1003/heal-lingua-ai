@@ -14,6 +14,39 @@ export type Database = {
   }
   public: {
     Tables: {
+      conversations: {
+        Row: {
+          ai_response: string | null
+          audio_duration_seconds: number | null
+          created_at: string
+          id: string
+          language_code: string
+          updated_at: string
+          user_id: string | null
+          user_transcript: string | null
+        }
+        Insert: {
+          ai_response?: string | null
+          audio_duration_seconds?: number | null
+          created_at?: string
+          id?: string
+          language_code?: string
+          updated_at?: string
+          user_id?: string | null
+          user_transcript?: string | null
+        }
+        Update: {
+          ai_response?: string | null
+          audio_duration_seconds?: number | null
+          created_at?: string
+          id?: string
+          language_code?: string
+          updated_at?: string
+          user_id?: string | null
+          user_transcript?: string | null
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           created_at: string
