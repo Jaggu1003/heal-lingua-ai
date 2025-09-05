@@ -113,12 +113,22 @@ export default function SpeechInterface() {
 
   const checkMicrophonePermission = async () => {
     try {
+      console.log('🔍 Checking microphone permission...');
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      console.log('✅ Microphone permission granted');
+      
+      // Check microphone capabilities
+      const track = stream.getAudioTracks()[0];
+      console.log('🎤 Microphone info:', {
+        label: track.label,
+        capabilities: track.getCapabilities?.() || 'N/A'
+      });
+      
       stream.getTracks().forEach(track => track.stop());
       setPermissionError(false);
       return true;
     } catch (error) {
-      console.error('Microphone permission error:', error);
+      console.error('❌ Microphone permission error:', error);
       setPermissionError(true);
       toast.error("Microphone permission denied. Please enable microphone access to use voice features.");
       return false;
@@ -127,30 +137,36 @@ export default function SpeechInterface() {
 
   const startConversation = async () => {
     try {
+      console.log('🚀 Starting conversation...');
       setStatus('connecting');
       
       const hasPermission = await checkMicrophonePermission();
       if (!hasPermission) {
+        console.error('❌ No microphone permission');
         setStatus('error');
         return;
       }
 
+      console.log('✅ Creating RealtimeSpeechChat instance');
       speechChatRef.current = new RealtimeSpeechChat();
       
       await speechChatRef.current.connect(
         handleMessage,
-        (newStatus) => setStatus(newStatus as ConnectionStatus),
+        (newStatus) => {
+          console.log('📊 Status changed to:', newStatus);
+          setStatus(newStatus as ConnectionStatus);
+        },
         selectedLanguage
       );
       
-      toast.success("Voice conversation started! Speak naturally to get healthcare advice.");
+      toast.success("Voice conversation started! Speak clearly into your microphone.");
     } catch (error) {
-      console.error('Error starting conversation:', error);
+      console.error('❌ Error starting conversation:', error);
       if (error.name === 'NotAllowedError') {
         toast.error("Microphone permission denied. Please enable microphone access.");
         setPermissionError(true);
       } else {
-        toast.error("Failed to start voice conversation. Please try again.");
+        toast.error(`Failed to start voice conversation: ${error.message}`);
       }
       setStatus('error');
     }

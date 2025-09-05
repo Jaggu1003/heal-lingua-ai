@@ -3,42 +3,80 @@ export class AudioRecorder {
   private audioContext: AudioContext | null = null;
   private processor: ScriptProcessorNode | null = null;
   private source: MediaStreamAudioSourceNode | null = null;
+  private isRecording = false;
 
   constructor(private onAudioData: (audioData: Float32Array) => void) {}
 
   async start() {
     try {
+      console.log('🎤 Requesting microphone access...');
+      
+      // Request microphone with specific constraints
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
           sampleRate: 24000,
           channelCount: 1,
           echoCancellation: true,
           noiseSuppression: true,
-          autoGainControl: true
+          autoGainControl: true,
         }
       });
       
+      console.log('✅ Microphone access granted');
+      console.log('📊 Audio tracks:', this.stream.getAudioTracks().map(track => ({
+        label: track.label,
+        enabled: track.enabled,
+        muted: track.muted,
+        readyState: track.readyState
+      })));
+      
+      // Create audio context
       this.audioContext = new AudioContext({
         sampleRate: 24000,
       });
       
+      // Resume if suspended
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+        console.log('🔄 AudioContext resumed');
+      }
+      
+      console.log('🎵 AudioContext state:', this.audioContext.state);
+      
+      // Create audio processing chain
       this.source = this.audioContext.createMediaStreamSource(this.stream);
       this.processor = this.audioContext.createScriptProcessor(4096, 1, 1);
       
       this.processor.onaudioprocess = (e) => {
+        if (!this.isRecording) return;
+        
         const inputData = e.inputBuffer.getChannelData(0);
-        this.onAudioData(new Float32Array(inputData));
+        
+        // Check if there's actual audio data (not just silence)
+        const hasAudio = Array.from(inputData).some(sample => Math.abs(sample) > 0.001);
+        
+        if (hasAudio) {
+          this.onAudioData(new Float32Array(inputData));
+        }
       };
       
+      // Connect the audio processing chain
       this.source.connect(this.processor);
       this.processor.connect(this.audioContext.destination);
+      
+      this.isRecording = true;
+      console.log('🔴 Audio recording started');
+      
     } catch (error) {
-      console.error('Error accessing microphone:', error);
+      console.error('❌ Error starting audio recorder:', error);
       throw error;
     }
   }
 
   stop() {
+    console.log('⏹️ Stopping audio recorder');
+    this.isRecording = false;
+    
     if (this.source) {
       this.source.disconnect();
       this.source = null;
@@ -48,10 +86,13 @@ export class AudioRecorder {
       this.processor = null;
     }
     if (this.stream) {
-      this.stream.getTracks().forEach(track => track.stop());
+      this.stream.getTracks().forEach(track => {
+        track.stop();
+        console.log('🛑 Stopped audio track:', track.label);
+      });
       this.stream = null;
     }
-    if (this.audioContext) {
+    if (this.audioContext && this.audioContext.state !== 'closed') {
       this.audioContext.close();
       this.audioContext = null;
     }
@@ -94,19 +135,17 @@ class AudioQueue {
       source.onended = () => this.playNext();
       source.start(0);
     } catch (error) {
-      console.error('Error playing audio:', error);
-      this.playNext(); // Continue with next segment even if current fails
+      console.error('❌ Error playing audio:', error);
+      this.playNext();
     }
   }
 
   private createWavFromPCM(pcmData: Uint8Array): Uint8Array {
-    // Convert bytes to 16-bit samples
     const int16Data = new Int16Array(pcmData.length / 2);
     for (let i = 0; i < pcmData.length; i += 2) {
       int16Data[i / 2] = (pcmData[i + 1] << 8) | pcmData[i];
     }
     
-    // Create WAV header
     const wavHeader = new ArrayBuffer(44);
     const view = new DataView(wavHeader);
     
@@ -116,14 +155,12 @@ class AudioQueue {
       }
     };
 
-    // WAV header parameters
     const sampleRate = 24000;
     const numChannels = 1;
     const bitsPerSample = 16;
     const blockAlign = (numChannels * bitsPerSample) / 8;
     const byteRate = sampleRate * blockAlign;
 
-    // Write WAV header
     writeString(view, 0, 'RIFF');
     view.setUint32(4, 36 + int16Data.byteLength, true);
     writeString(view, 8, 'WAVE');
@@ -138,7 +175,6 @@ class AudioQueue {
     writeString(view, 36, 'data');
     view.setUint32(40, int16Data.byteLength, true);
 
-    // Combine header and data
     const wavArray = new Uint8Array(wavHeader.byteLength + int16Data.byteLength);
     wavArray.set(new Uint8Array(wavHeader), 0);
     wavArray.set(new Uint8Array(int16Data.buffer), wavHeader.byteLength);
@@ -173,56 +209,96 @@ export class RealtimeSpeechChat {
   private recorder: AudioRecorder | null = null;
   private onMessageCallback: ((message: any) => void) | null = null;
   private onStatusChangeCallback: ((status: string) => void) | null = null;
-  private sessionCreated = false;
+  private sessionReady = false;
   private currentLanguage = 'en';
+  private connectionTimeout: NodeJS.Timeout | null = null;
 
   constructor() {
-    // Don't create AudioContext here - wait for user interaction
+    console.log('🔧 Initializing RealtimeSpeechChat');
   }
 
   async connect(onMessage: (message: any) => void, onStatusChange: (status: string) => void, language = 'en') {
+    console.log('🚀 Starting connection process...');
     this.onMessageCallback = onMessage;
     this.onStatusChangeCallback = onStatusChange;
     this.currentLanguage = language;
-    this.sessionCreated = false;
+    this.sessionReady = false;
 
     try {
-      // Create AudioContext with user gesture
-      if (!this.audioContext) {
-        this.audioContext = new AudioContext({ sampleRate: 24000 });
-        this.audioQueue = new AudioQueue(this.audioContext);
-      }
-
-      // Resume AudioContext if suspended
+      // Create AudioContext with user interaction
+      this.audioContext = new AudioContext({ sampleRate: 24000 });
+      console.log('🎵 AudioContext created, state:', this.audioContext.state);
+      
       if (this.audioContext.state === 'suspended') {
         await this.audioContext.resume();
-        console.log('AudioContext resumed');
+        console.log('🔄 AudioContext resumed');
       }
+      
+      this.audioQueue = new AudioQueue(this.audioContext);
 
+      // Connect to WebSocket
       const wsUrl = `wss://qvoxdwzjbcprfhpykidx.functions.supabase.co/realtime-speech`;
-      console.log('Connecting to:', wsUrl);
+      console.log('🔌 Connecting to:', wsUrl);
+      
       this.ws = new WebSocket(wsUrl);
+      
+      // Set connection timeout
+      this.connectionTimeout = setTimeout(() => {
+        console.error('⏰ Connection timeout');
+        this.onStatusChangeCallback?.('error');
+      }, 10000);
 
-      this.ws.onopen = () => {
-        console.log('WebSocket connected - waiting for session.created');
-        this.onStatusChangeCallback?.('connecting');
-      };
+      this.setupWebSocketHandlers();
+      
+    } catch (error) {
+      console.error('❌ Error in connect:', error);
+      this.onStatusChangeCallback?.('error');
+      throw error;
+    }
+  }
 
-      this.ws.onmessage = async (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          console.log('Received message:', data.type, data);
-          
-          if (data.type === 'session.created') {
-            console.log('Session created, sending session.update');
-            this.sessionCreated = true;
-            this.sendSessionUpdate(this.currentLanguage);
-          } else if (data.type === 'session.updated') {
-            console.log('Session updated, starting audio recording');
+  private setupWebSocketHandlers() {
+    if (!this.ws) return;
+
+    this.ws.onopen = () => {
+      console.log('✅ WebSocket connected');
+      if (this.connectionTimeout) {
+        clearTimeout(this.connectionTimeout);
+        this.connectionTimeout = null;
+      }
+      this.onStatusChangeCallback?.('connecting');
+    };
+
+    this.ws.onmessage = async (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        console.log('📨 Received:', data.type);
+        
+        switch (data.type) {
+          case 'session.created':
+            console.log('🎯 Session created, configuring...');
+            this.configureSession();
+            break;
+            
+          case 'session.updated':
+            console.log('✅ Session configured, ready for audio');
+            this.sessionReady = true;
             this.onStatusChangeCallback?.('connected');
-            await this.startRecording();
-          } else if (data.type === 'response.audio.delta') {
-            // Play audio chunk
+            await this.startMicrophoneCapture();
+            break;
+            
+          case 'input_audio_buffer.speech_started':
+            console.log('🗣️ User started speaking');
+            this.onStatusChangeCallback?.('listening');
+            break;
+            
+          case 'input_audio_buffer.speech_stopped':
+            console.log('🤫 User stopped speaking');
+            this.onStatusChangeCallback?.('processing');
+            break;
+            
+          case 'response.audio.delta':
+            // Play AI audio response
             const binaryString = atob(data.delta);
             const bytes = new Uint8Array(binaryString.length);
             for (let i = 0; i < binaryString.length; i++) {
@@ -230,93 +306,102 @@ export class RealtimeSpeechChat {
             }
             await this.audioQueue?.addToQueue(bytes);
             this.onStatusChangeCallback?.('speaking');
-          } else if (data.type === 'response.audio_transcript.delta') {
-            // Handle transcript
+            break;
+            
+          case 'response.audio_transcript.delta':
+          case 'conversation.item.input_audio_transcription.completed':
+          case 'response.audio_transcript.done':
             this.onMessageCallback?.(data);
-          } else if (data.type === 'input_audio_buffer.speech_started') {
-            console.log('Speech started detected');
-            this.onStatusChangeCallback?.('listening');
-          } else if (data.type === 'input_audio_buffer.speech_stopped') {
-            console.log('Speech stopped detected');
-            this.onStatusChangeCallback?.('processing');
-          } else if (data.type === 'conversation.item.input_audio_transcription.completed') {
-            console.log('User transcript:', data.transcript);
-            this.onMessageCallback?.(data);
-          } else if (data.type === 'response.audio_transcript.done') {
-            this.onMessageCallback?.(data);
-          } else if (data.type === 'response.done') {
-            console.log('Response done');
+            break;
+            
+          case 'response.done':
+            console.log('✅ AI response complete');
             this.onStatusChangeCallback?.('connected');
-          } else if (data.type === 'error') {
-            console.error('OpenAI error:', data.error);
+            break;
+            
+          case 'error':
+            console.error('❌ OpenAI error:', data.error);
             this.onStatusChangeCallback?.('error');
-          }
-        } catch (error) {
-          console.error('Error processing message:', error);
+            break;
+            
+          default:
+            console.log('📋 Other message:', data.type);
         }
-      };
+      } catch (error) {
+        console.error('❌ Error processing message:', error);
+      }
+    };
 
-      this.ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        this.onStatusChangeCallback?.('error');
-      };
-
-      this.ws.onclose = (event) => {
-        console.log('WebSocket closed:', event.code, event.reason);
-        this.onStatusChangeCallback?.('disconnected');
-      };
-      
-    } catch (error) {
-      console.error('Error connecting:', error);
+    this.ws.onerror = (error) => {
+      console.error('❌ WebSocket error:', error);
+      if (this.connectionTimeout) {
+        clearTimeout(this.connectionTimeout);
+      }
       this.onStatusChangeCallback?.('error');
-      throw error;
-    }
+    };
+
+    this.ws.onclose = (event) => {
+      console.log('🔌 WebSocket closed:', event.code, event.reason);
+      if (this.connectionTimeout) {
+        clearTimeout(this.connectionTimeout);
+      }
+      this.onStatusChangeCallback?.('disconnected');
+    };
   }
 
-  private sendSessionUpdate(language: string) {
-    if (this.ws?.readyState === WebSocket.OPEN && this.sessionCreated) {
-      console.log('Sending session.update for language:', language);
-      this.ws.send(JSON.stringify({
-        type: 'session.update',
-        session: {
-          instructions: `You are a helpful healthcare assistant. Always respond in ${language === 'en' ? 'English' : this.getLanguageName(language)}. Provide brief, practical home remedies and health advice. Include appropriate medical disclaimers. Keep responses concise and under 30 seconds when speaking.`,
-          modalities: ['text', 'audio'],
-          voice: 'alloy',
-          input_audio_format: 'pcm16',
-          output_audio_format: 'pcm16',
-          input_audio_transcription: {
-            model: 'whisper-1'
-          },
-          turn_detection: {
-            type: 'server_vad',
-            threshold: 0.5,
-            prefix_padding_ms: 300,
-            silence_duration_ms: 1500
-          },
-          temperature: 0.8,
-          max_response_output_tokens: 1000
-        }
-      }));
-    }
+  private configureSession() {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    
+    const sessionConfig = {
+      type: 'session.update',
+      session: {
+        modalities: ['text', 'audio'],
+        instructions: `You are a helpful healthcare assistant. Always respond in ${this.currentLanguage === 'en' ? 'English' : this.getLanguageName(this.currentLanguage)}. Provide brief, practical home remedies and health advice. Include appropriate medical disclaimers. Keep responses concise and under 20 seconds.`,
+        voice: 'alloy',
+        input_audio_format: 'pcm16',
+        output_audio_format: 'pcm16',
+        input_audio_transcription: {
+          model: 'whisper-1'
+        },
+        turn_detection: {
+          type: 'server_vad',
+          threshold: 0.6, // Higher threshold to reduce false positives
+          prefix_padding_ms: 300,
+          silence_duration_ms: 2000 // Longer silence to avoid cutting off
+        },
+        temperature: 0.7,
+        max_response_output_tokens: 500
+      }
+    };
+    
+    console.log('⚙️ Sending session configuration');
+    this.ws.send(JSON.stringify(sessionConfig));
   }
 
-  private async startRecording() {
+  private async startMicrophoneCapture() {
     try {
-      console.log('Starting audio recording...');
+      console.log('🎤 Starting microphone capture...');
+      
       this.recorder = new AudioRecorder((audioData) => {
-        if (this.ws?.readyState === WebSocket.OPEN) {
-          const encodedAudio = encodeAudioForAPI(audioData);
-          this.ws.send(JSON.stringify({
-            type: 'input_audio_buffer.append',
-            audio: encodedAudio
-          }));
+        if (this.ws?.readyState === WebSocket.OPEN && this.sessionReady) {
+          // Only send audio if there's actual content
+          const hasContent = Array.from(audioData).some(sample => Math.abs(sample) > 0.01);
+          if (hasContent) {
+            const encoded = encodeAudioForAPI(audioData);
+            this.ws.send(JSON.stringify({
+              type: 'input_audio_buffer.append',
+              audio: encoded
+            }));
+          }
         }
       });
 
       await this.recorder.start();
-      console.log('Audio recording started successfully');
+      console.log('✅ Microphone capture started');
+      
     } catch (error) {
-      console.error('Error starting recording:', error);
+      console.error('❌ Failed to start microphone:', error);
+      this.onStatusChangeCallback?.('error');
       throw error;
     }
   }
@@ -340,20 +425,29 @@ export class RealtimeSpeechChat {
   }
 
   updateLanguage(language: string) {
+    console.log('🌍 Updating language to:', language);
     this.currentLanguage = language;
-    if (this.sessionCreated) {
-      this.sendSessionUpdate(language);
+    if (this.sessionReady) {
+      this.configureSession();
     }
   }
 
   disconnect() {
-    console.log('Disconnecting RealtimeSpeechChat');
+    console.log('🔌 Disconnecting RealtimeSpeechChat');
+    
+    if (this.connectionTimeout) {
+      clearTimeout(this.connectionTimeout);
+      this.connectionTimeout = null;
+    }
+    
     this.recorder?.stop();
     this.ws?.close();
+    
     if (this.audioContext && this.audioContext.state !== 'closed') {
       this.audioContext.close();
     }
-    this.sessionCreated = false;
+    
+    this.sessionReady = false;
     this.onStatusChangeCallback?.('disconnected');
   }
 }
