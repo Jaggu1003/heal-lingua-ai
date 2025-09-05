@@ -173,53 +173,55 @@ export class RealtimeSpeechChat {
   private recorder: AudioRecorder | null = null;
   private onMessageCallback: ((message: any) => void) | null = null;
   private onStatusChangeCallback: ((status: string) => void) | null = null;
+  private sessionCreated = false;
+  private currentLanguage = 'en';
 
   constructor() {
-    this.audioContext = new AudioContext({ sampleRate: 24000 });
-    this.audioQueue = new AudioQueue(this.audioContext);
+    // Don't create AudioContext here - wait for user interaction
   }
 
   async connect(onMessage: (message: any) => void, onStatusChange: (status: string) => void, language = 'en') {
     this.onMessageCallback = onMessage;
     this.onStatusChangeCallback = onStatusChange;
+    this.currentLanguage = language;
+    this.sessionCreated = false;
 
     try {
+      // Create AudioContext with user gesture
+      if (!this.audioContext) {
+        this.audioContext = new AudioContext({ sampleRate: 24000 });
+        this.audioQueue = new AudioQueue(this.audioContext);
+      }
+
+      // Resume AudioContext if suspended
+      if (this.audioContext.state === 'suspended') {
+        await this.audioContext.resume();
+        console.log('AudioContext resumed');
+      }
+
       const wsUrl = `wss://qvoxdwzjbcprfhpykidx.functions.supabase.co/realtime-speech`;
+      console.log('Connecting to:', wsUrl);
       this.ws = new WebSocket(wsUrl);
 
       this.ws.onopen = () => {
-        console.log('Connected to speech service');
-        this.onStatusChangeCallback?.('connected');
-        
-        // Send language preference to the backend
-        this.ws?.send(JSON.stringify({
-          type: 'session.update',
-          session: {
-            instructions: `You are a helpful healthcare assistant. Always respond in ${language === 'en' ? 'English' : this.getLanguageName(language)}. Provide brief, practical home remedies and health advice. Include appropriate medical disclaimers.`,
-            modalities: ['text', 'audio'],
-            voice: 'alloy',
-            input_audio_format: 'pcm16',
-            output_audio_format: 'pcm16',
-            input_audio_transcription: {
-              model: 'whisper-1'
-            },
-            turn_detection: {
-              type: 'server_vad',
-              threshold: 0.5,
-              prefix_padding_ms: 300,
-              silence_duration_ms: 1000
-            },
-            temperature: 0.8
-          }
-        }));
+        console.log('WebSocket connected - waiting for session.created');
+        this.onStatusChangeCallback?.('connecting');
       };
 
       this.ws.onmessage = async (event) => {
         try {
           const data = JSON.parse(event.data);
-          console.log('Received message:', data.type);
+          console.log('Received message:', data.type, data);
           
-          if (data.type === 'response.audio.delta') {
+          if (data.type === 'session.created') {
+            console.log('Session created, sending session.update');
+            this.sessionCreated = true;
+            this.sendSessionUpdate(this.currentLanguage);
+          } else if (data.type === 'session.updated') {
+            console.log('Session updated, starting audio recording');
+            this.onStatusChangeCallback?.('connected');
+            await this.startRecording();
+          } else if (data.type === 'response.audio.delta') {
             // Play audio chunk
             const binaryString = atob(data.delta);
             const bytes = new Uint8Array(binaryString.length);
@@ -227,15 +229,27 @@ export class RealtimeSpeechChat {
               bytes[i] = binaryString.charCodeAt(i);
             }
             await this.audioQueue?.addToQueue(bytes);
+            this.onStatusChangeCallback?.('speaking');
           } else if (data.type === 'response.audio_transcript.delta') {
             // Handle transcript
             this.onMessageCallback?.(data);
           } else if (data.type === 'input_audio_buffer.speech_started') {
+            console.log('Speech started detected');
             this.onStatusChangeCallback?.('listening');
           } else if (data.type === 'input_audio_buffer.speech_stopped') {
+            console.log('Speech stopped detected');
             this.onStatusChangeCallback?.('processing');
+          } else if (data.type === 'conversation.item.input_audio_transcription.completed') {
+            console.log('User transcript:', data.transcript);
+            this.onMessageCallback?.(data);
+          } else if (data.type === 'response.audio_transcript.done') {
+            this.onMessageCallback?.(data);
           } else if (data.type === 'response.done') {
+            console.log('Response done');
             this.onStatusChangeCallback?.('connected');
+          } else if (data.type === 'error') {
+            console.error('OpenAI error:', data.error);
+            this.onStatusChangeCallback?.('error');
           }
         } catch (error) {
           console.error('Error processing message:', error);
@@ -247,27 +261,62 @@ export class RealtimeSpeechChat {
         this.onStatusChangeCallback?.('error');
       };
 
-      this.ws.onclose = () => {
-        console.log('WebSocket closed');
+      this.ws.onclose = (event) => {
+        console.log('WebSocket closed:', event.code, event.reason);
         this.onStatusChangeCallback?.('disconnected');
       };
+      
+    } catch (error) {
+      console.error('Error connecting:', error);
+      this.onStatusChangeCallback?.('error');
+      throw error;
+    }
+  }
 
-      // Start recording
+  private sendSessionUpdate(language: string) {
+    if (this.ws?.readyState === WebSocket.OPEN && this.sessionCreated) {
+      console.log('Sending session.update for language:', language);
+      this.ws.send(JSON.stringify({
+        type: 'session.update',
+        session: {
+          instructions: `You are a helpful healthcare assistant. Always respond in ${language === 'en' ? 'English' : this.getLanguageName(language)}. Provide brief, practical home remedies and health advice. Include appropriate medical disclaimers. Keep responses concise and under 30 seconds when speaking.`,
+          modalities: ['text', 'audio'],
+          voice: 'alloy',
+          input_audio_format: 'pcm16',
+          output_audio_format: 'pcm16',
+          input_audio_transcription: {
+            model: 'whisper-1'
+          },
+          turn_detection: {
+            type: 'server_vad',
+            threshold: 0.5,
+            prefix_padding_ms: 300,
+            silence_duration_ms: 1500
+          },
+          temperature: 0.8,
+          max_response_output_tokens: 1000
+        }
+      }));
+    }
+  }
+
+  private async startRecording() {
+    try {
+      console.log('Starting audio recording...');
       this.recorder = new AudioRecorder((audioData) => {
         if (this.ws?.readyState === WebSocket.OPEN) {
+          const encodedAudio = encodeAudioForAPI(audioData);
           this.ws.send(JSON.stringify({
             type: 'input_audio_buffer.append',
-            audio: encodeAudioForAPI(audioData)
+            audio: encodedAudio
           }));
         }
       });
 
       await this.recorder.start();
-      console.log('Audio recording started');
-      
+      console.log('Audio recording started successfully');
     } catch (error) {
-      console.error('Error connecting:', error);
-      this.onStatusChangeCallback?.('error');
+      console.error('Error starting recording:', error);
       throw error;
     }
   }
@@ -291,20 +340,20 @@ export class RealtimeSpeechChat {
   }
 
   updateLanguage(language: string) {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({
-        type: 'session.update',
-        session: {
-          instructions: `You are a helpful healthcare assistant. Always respond in ${language === 'en' ? 'English' : this.getLanguageName(language)}. Provide brief, practical home remedies and health advice. Include appropriate medical disclaimers.`
-        }
-      }));
+    this.currentLanguage = language;
+    if (this.sessionCreated) {
+      this.sendSessionUpdate(language);
     }
   }
 
   disconnect() {
+    console.log('Disconnecting RealtimeSpeechChat');
     this.recorder?.stop();
     this.ws?.close();
-    this.audioContext?.close();
+    if (this.audioContext && this.audioContext.state !== 'closed') {
+      this.audioContext.close();
+    }
+    this.sessionCreated = false;
     this.onStatusChangeCallback?.('disconnected');
   }
 }
